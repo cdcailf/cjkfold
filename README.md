@@ -109,6 +109,12 @@ cjkfold fold -w document.txt    # rewrite in place
 cat document.txt | cjkfold check -
 ```
 
+Exit codes: `0` clean, `1` look-alike characters found, `2` the input is not a text
+file (or not UTF-8) and nothing was scanned. `2` is separate from `1` on purpose —
+"I found something" and "I could not look" are different answers. Pass a PDF and it
+will say so and hand you the `pdftotext` command, instead of reporting phantom
+findings from binary data.
+
 ```
 $ cjkfold check extracted.txt
 extracted.txt: 3 look-alike character(s) (1 kangxi, 2 radical-supplement)

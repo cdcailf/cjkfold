@@ -243,8 +243,12 @@ for document, score in rerank(question, documents, scores):
 
 ```bash
 pip install cjkfold
-cjkfold check 你的资料.pdf            # 或者先把 PDF 抽成 txt
+cjkfold check 你的资料.txt            # 先抽成 txt（PDF 本身不是文本，它会拒绝并告诉你抽文本的命令）
+cjkfold check 你的资料.txt --quiet   # 只看有问题的文件
 ```
+
+> 别把 PDF 直接喂给它。v0.1.1 之前它会把二进制当文本读、报出三条**不存在**的形近字符
+> （`⻱ U+2EF1` 之类，其实是嵌入字体里的字节序列）。v0.2 起非文本输入会被拒绝并给 exit 2。
 
 如果报了一堆 `U+2Fxx` / `U+2Exx`，那你现在的检索就是坏的——**而且你大概率一直不知道**。
 

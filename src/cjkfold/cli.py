@@ -3,8 +3,16 @@
     cjkfold check FILE...        report look-alike characters
     cjkfold fold  FILE...        print (or rewrite) folded text
 
-``check`` exits non-zero when it finds anything, so it can be dropped into a
-build or ingest pipeline to catch PDF extraction regressions early.
+Exit codes::
+
+    0   clean
+    1   look-alike characters found
+    2   the input is not a text file (or not UTF-8) -- nothing was scanned
+
+``check`` exits non-zero when it finds anything, so it can be dropped into a build
+or ingest pipeline to catch PDF extraction regressions early. Code 2 is kept separate
+from code 1 on purpose: "I found something" and "I could not look" are different
+answers, and a pipeline that can only see "non-zero" would report a PDF as a finding.
 """
 
 from __future__ import annotations
@@ -14,20 +22,23 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .inputs import NotTextFile, read_text
 from .normalize import fold, iter_lookalikes
 
 __all__ = ["main"]
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace")
-
-
 def _cmd_check(args: argparse.Namespace) -> int:
     total = 0
+    rejected = False
     for name in args.paths:
         path = Path(name)
-        text = _read(path)
+        try:
+            text = read_text(path)
+        except NotTextFile as exc:
+            print(exc.format(), file=sys.stderr)
+            rejected = True
+            continue
         found = list(iter_lookalikes(text))
         total += len(found)
         if not found:
@@ -43,6 +54,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
             print(f"    {item}")
         if args.max and len(found) > args.max:
             print(f"    ... and {len(found) - args.max} more (raise --max to see them)")
+    if rejected:
+        return 2
     if total:
         print(f"\n{total} character(s) would change under `cjkfold fold`.")
         return 1
@@ -50,9 +63,18 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_fold(args: argparse.Namespace) -> int:
+    rejected = False
     for name in args.paths:
         path = Path(name)
-        folded = fold(_read(path))
+        try:
+            text = read_text(path)
+        except NotTextFile as exc:
+            # Refuse rather than fold: with --write this used to decode binary into
+            # mojibake and write it back over the original file.
+            print(exc.format(), file=sys.stderr)
+            rejected = True
+            continue
+        folded = fold(text)
         if args.write:
             path.write_text(folded, encoding="utf-8")
             print(f"{path}: rewritten", file=sys.stderr)
@@ -60,7 +82,7 @@ def _cmd_fold(args: argparse.Namespace) -> int:
             if len(args.paths) > 1:
                 print(f"===== {path} =====", file=sys.stderr)
             sys.stdout.write(folded)
-    return 0
+    return 2 if rejected else 0
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -12,6 +12,7 @@ framework-agnostic adapters that fold a whole document set.
 from __future__ import annotations
 
 from ._table import EQUIVALENT_IDEOGRAPH
+from .inputs import NotTextFile, read_text
 from .integrations import fold_document, fold_documents, rerank, text_of
 from .normalize import Lookalike, fold, has_lookalikes, iter_lookalikes, kind_of
 from .score import exact_boost, ngram_overlap, ngrams
@@ -31,6 +32,8 @@ __all__ = [
     "fold_document",
     "fold_documents",
     "rerank",
+    "read_text",
+    "NotTextFile",
     "EQUIVALENT_IDEOGRAPH",
     "__version__",
 ]

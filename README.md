@@ -27,6 +27,7 @@ Zero runtime dependencies. Pure functions. Python 3.9+.
 
 **背景阅读 / Background:** [PDF 抽出来的中文，为什么搜不到](docs/why-cjk-text-breaks.md)
 —— 完整的排查经过（中文），包括我自己踩的四个坑。
+社区版：[掘金](https://juejin.cn/post/7695671592383807542)
 
 ## The problem
 

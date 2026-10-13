@@ -131,6 +131,30 @@ because nothing ever matches. The API gives you no way to get it wrong.
 Queries shorter than the shingle size fall back to a containment test, so a
 two-character query is not silently scored zero.
 
+## Wiring it into a pipeline
+
+Three touch points, zero framework dependencies:
+
+```python
+from cjkfold import fold, fold_documents, rerank
+
+# 1. on the way in -- clean the corpus before it is embedded
+documents = fold_documents(loader.load())
+
+# 2. on the way out -- fold the query so it can match
+hits = vectorstore.similarity_search_with_score(fold(question), k=20)
+
+# 3. before you trust the order -- restore the verbatim matches
+documents, scores = zip(*hits)
+for document, score in rerank(question, documents, scores):
+    ...
+```
+
+`fold_documents` and `rerank` recognise LangChain documents (`page_content`),
+LlamaIndex nodes (`text`) and plain strings -- and import none of them. Making
+you install a framework in order to fold a string would be a bad trade:
+framework APIs move, string folding does not.
+
 ## Caveats
 
 - **Glyph folding only.** No traditional⇄simplified conversion, no z-variant

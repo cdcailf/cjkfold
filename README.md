@@ -29,6 +29,10 @@ Zero runtime dependencies. Pure functions. Python 3.9+.
 —— 完整的排查经过（中文），包括我自己踩的四个坑。
 社区版：[掘金](https://juejin.cn/post/7695671592383807542)
 
+**Built on this:** [corpusfold](https://github.com/cdcailf/corpusfold) — this
+character layer wired into a full PDF → knowledge-base pipeline (抽取 / 分栏 /
+表格 / 分块 / 混合检索).
+
 ## The problem
 
 Nothing raises. The text displays correctly, because the glyphs really are
@@ -64,9 +68,16 @@ ideograph equivalent and is left alone.
 
 ## Install
 
+Not published on PyPI yet, so install from a checkout:
+
 ```bash
-pip install cjkfold
+git clone https://github.com/cdcailf/cjkfold
+cd cjkfold
+uv venv .venv --python 3.11
+uv pip install -e .
 ```
+
+Once it is published this collapses to `pip install cjkfold`.
 
 ## Usage
 

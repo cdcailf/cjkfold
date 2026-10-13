@@ -68,16 +68,9 @@ ideograph equivalent and is left alone.
 
 ## Install
 
-Not published on PyPI yet, so install from a checkout:
-
 ```bash
-git clone https://github.com/cdcailf/cjkfold
-cd cjkfold
-uv venv .venv --python 3.11
-uv pip install -e .
+pip install cjkfold
 ```
-
-Once it is published this collapses to `pip install cjkfold`.
 
 ## Usage
 

@@ -16,7 +16,7 @@ from .integrations import fold_document, fold_documents, rerank, text_of
 from .normalize import Lookalike, fold, has_lookalikes, iter_lookalikes, kind_of
 from .score import exact_boost, ngram_overlap, ngrams
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "fold",

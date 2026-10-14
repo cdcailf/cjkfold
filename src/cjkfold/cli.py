@@ -22,10 +22,26 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+import cjkfold
+
 from .inputs import NotTextFile, read_text
 from .normalize import fold, iter_lookalikes
 
 __all__ = ["main"]
+
+PROG = "cjkfold"
+
+
+def _version_string() -> str:
+    """Report the package's version -- read from it, never copied from it.
+
+    This used to be the literal ``"cjkfold 0.1.0"``, one release behind the package
+    and one behind the packaging metadata, so ``cjkfold --version`` contradicted
+    ``cjkfold.__version__`` in public. A local copy would drift the same way on the
+    next bump; an attribute read cannot. ``tests/test_version.py`` proves the
+    difference by mutating ``cjkfold.__version__`` and watching this follow.
+    """
+    return f"{PROG} {cjkfold.__version__}"
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
@@ -87,10 +103,10 @@ def _cmd_fold(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cjkfold",
+        prog=PROG,
         description="Fold look-alike CJK glyphs onto their canonical ideograph.",
     )
-    parser.add_argument("--version", action="version", version="cjkfold 0.1.0")
+    parser.add_argument("--version", action="version", version=_version_string())
     sub = parser.add_subparsers(dest="command", required=True)
 
     check = sub.add_parser(

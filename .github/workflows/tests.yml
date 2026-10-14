@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      # -- Do not cancel the other versions when one fails: which interpreter breaks
+      # -- is exactly the information this job exists to produce.
+      fail-fast: false
+      matrix:
+        # -- Matches the classifiers in pyproject.toml. If a version here is red, the
+        # -- metadata claims support the code does not have.
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Test
+        run: python -m pytest

@@ -1,5 +1,7 @@
 # cjkfold
 
+[![tests](https://github.com/cdcailf/cjkfold/actions/workflows/tests.yml/badge.svg)](https://github.com/cdcailf/cjkfold/actions/workflows/tests.yml)
+
 Text pulled out of a PDF often contains characters that **look** like ordinary
 Han characters but are not them. Comparison against them quietly fails.
 

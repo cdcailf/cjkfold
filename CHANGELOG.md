@@ -3,6 +3,32 @@
 Releases are cut from `main`. The tests in `tests/` are the contract; the
 equivalence table is generated, never hand-edited.
 
+## 0.4.0 — 2026-10-15
+
+No new features. One structural fix, and it breaks an import path.
+
+### Changed
+
+- **The fold family moved from `cjkfold.normalize` to `cjkfold.folding`; the two
+  writes moved to `cjkfold.rewrite`.** Nothing about the *functions* changed —
+  `from cjkfold import fold, normalize, strip_invisible` behaves exactly as it did.
+
+  Why: a function named `normalize` cannot live in a module named `normalize` without
+  one of the two losing its name, and `import a.b as c` means `c = a.b`. So
+  `import cjkfold.normalize as m` handed you the *function*, and `m.fold` raised
+  `AttributeError`. Every name now means one thing: `cjkfold.normalize` is the
+  function, `cjkfold.folding` is the module. (`af57ad7`)
+
+  What breaks: `from cjkfold.normalize import fold` — a path nothing ever
+  documented, and it now fails with a plain `ModuleNotFoundError` instead of an
+  `AttributeError` from something that was never a module. Every documented import
+  is untouched.
+
+### Tests
+
+- `scripts/acceptance.py` gained import-path checks, including one that the old
+  path is gone. (`af57ad7`)
+
 ## 0.3.0 — 2026-10-15
 
 ### Added

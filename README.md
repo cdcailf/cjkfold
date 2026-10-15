@@ -68,6 +68,69 @@ the Unicode Character Database (Unicode 15.1+), which maps 114 of them onto a
 unified ideograph. The one remainder, `⺀ U+2E80 CJK RADICAL REPEAT`, has no
 ideograph equivalent and is left alone.
 
+## The characters that never show up
+
+There is a second family, and it is harder to catch. A zero-width space leaves no
+glyph at all, so two strings that differ only by it look identical:
+
+    数据
+    数\u200b据
+
+```python
+"数\u200b据" == "数据"                                  # False
+unicodedata.normalize("NFKC", "数\u200b据") == "数据"     # False as well
+```
+
+`fold()` does not repair these, deliberately: half the family is load-bearing. ZWJ
+`U+200D` is what holds an emoji sequence together — 👨‍👩‍👧 is five code points rendered as
+one glyph, and deleting the joiners does not tidy the text up, it turns one family
+into three people.
+
+`check` looks for the first family only, so a file full of zero-width spaces comes
+back `clean`. `scan` looks at every family and says what to do with each finding:
+
+```
+$ cjkfold scan document.txt
+document.txt  21 characters  5 findings
+
+  lookalike  1
+      1:4  U+2F8A  -> 色 U+8272                   fold   (KANGXI RADICAL COLOR)
+           renders exactly like 色, but sits on a separate kangxi code point
+
+  compat  1
+      2:5  U+FF21  -> A U+0041                    nfkc   (FULLWIDTH LATIN CAPITAL LETTER A)
+           NFKC would rewrite this; fold() leaves it alone on purpose, so the decision stays with the caller
+
+  invisible  3
+      3:2  U+200B  ZERO WIDTH SPACE               strip
+           prints as nothing at all -- two strings that differ only by this character look identical
+      4:2  U+200D  ZERO WIDTH JOINER              manual
+           zero width joiner: it holds emoji sequences together -- a family of three is five code points, and deleting the joiners leaves three separate people
+      4:4  U+200D  ZERO WIDTH JOINER              manual
+           (same character as 4:2)
+
+  fixable   lookalike: fold    compat: nfkc    invisible: strip, manual
+  see also  cjkfold scan --classes invisible
+            cjkfold fold --help
+```
+
+The reason is printed once per character rather than once per occurrence: an
+emoji-heavy document can hold hundreds of joiners, and repeating the same sentence
+hundreds of times buries the lines that differ.
+
+The `fixable` column is the point of the design:
+
+| | |
+|---|---|
+| `fold` | cjkfold can replace it: a look-alike glyph |
+| `nfkc` | NFKC would rewrite it, and `fold()` deliberately leaves that decision to the caller |
+| `strip` | safe to delete — it never shows and carries nothing |
+| `manual` | **do not delete it without looking.** ZWJ, ZWNJ, variation selectors and bidi controls change the meaning or the rendering of the text around them |
+
+So `scan` exits `0` even when it finds something: it is a report, not a gate. It has
+to be — a gate that fails on a load-bearing joiner fails on ordinary emoji. Pass
+`--strict` if you have read the findings and want a gate anyway.
+
 ## Install
 
 ```bash
@@ -106,16 +169,20 @@ clean = fold(unicodedata.normalize("NFKC", text))
 ```bash
 cjkfold check document.txt      # report look-alikes, exit 1 if any (CI-friendly)
 cjkfold check --quiet docs/*.txt
+cjkfold scan document.txt       # report every class of finding, exit 0 (it is a report)
+cjkfold scan --strict corpus.txt    # ...or exit 1 when a foldable/compat character is found
+cjkfold scan --json corpus.txt  # one JSON object per file
 cjkfold fold document.txt       # print the folded text
 cjkfold fold -w document.txt    # rewrite in place
 cat document.txt | cjkfold check -
 ```
 
-Exit codes: `0` clean, `1` look-alike characters found, `2` the input is not a text
-file (or not UTF-8) and nothing was scanned. `2` is separate from `1` on purpose —
-"I found something" and "I could not look" are different answers. Pass a PDF and it
-will say so and hand you the `pdftotext` command, instead of reporting phantom
-findings from binary data.
+Exit codes: `0` clean, `1` look-alike characters found (`check`), or findings under
+`scan --strict`, `2` the input is not a text file (or not UTF-8) and nothing was
+scanned. `2` is separate from `1` on purpose — "I found something" and "I could not
+look" are different answers. Pass a PDF and it will say so and hand you the
+`pdftotext` command, instead of reporting phantom findings from binary data. `scan`
+finds things and still exits `0`; the section above is why.
 
 ```
 $ cjkfold check extracted.txt
@@ -123,6 +190,8 @@ extracted.txt: 3 look-alike character(s) (1 kangxi, 2 radical-supplement)
     1:4  ⾊ U+2F8A -> 色 U+8272  (KANGXI RADICAL COLOR)
     1:7  ⻆ U+2EC6 -> 角 U+89D2  (CJK RADICAL SIMPLIFIED HORN)
     2:5  ⺮ U+2EAE -> 𥫗 U+25AD7  (CJK RADICAL BAMBOO)
+
+3 character(s) would change under `cjkfold fold`.
 ```
 
 Drop `cjkfold check` into an ingest pipeline to catch extraction regressions
@@ -213,6 +282,16 @@ PDF 抽出来的中文常常混着**形近异码**字符：`⻆` 和 `角` 长�
 `cjkfold` 用 Unicode 官方的 `EquivalentUnifiedIdeograph` 属性补上这个缺口，
 115 个里能还原 114 个。同时提供 `exact_boost()`，把"查询片段在文档里逐字命中"
 补进向量相似度，避免短文档靠余弦虚高把真正命中的长文档挤下去。
+
+还有第二族，比形近更难发现：**看不见的字符**——零宽空格、bidi 控制符、变体选择符。
+它们打印出来和正常文本一模一样，`fold()` 不碰（这一族一半是承重的：emoji 序列里的
+ZWJ 删掉，一家三口就变成三个人），`NFKC` 也管不着。
+
+`cjkfold check` 只找第一族，给它一个塞满零宽空格的文件，它会说 `clean`；
+`cjkfold scan` 三类都看，并对每条标注处置：`fold`（可以替换）/ `nfkc`（NFKC 才管，
+`fold()` 故意不做）/ `strip`（删掉安全）/ `manual`（**不许自动改，你自己看**）。
+`scan` 默认退出码是 `0`：它是体检报告，不是门禁——正常语料里一个 emoji 就带两个 ZWJ，
+拿它拦 CI 会把好文档判死；确实想要门禁就加 `--strict`。
 
 ## License
 

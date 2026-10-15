@@ -115,10 +115,27 @@ def has_lookalikes(text: str) -> bool:
     return any(ord(char) in _FOLD for char in text)
 
 
-def iter_lookalikes(text: str) -> Iterator[Lookalike]:
-    """Yield every foldable character in *text*, in order, with 1-based position."""
+def _iter_positions(text: str) -> Iterator[tuple[int, int, int, str]]:
+    """Yield ``(index, line, column, char)`` for each character, 1-based positions.
+
+    The only place in the package that decides what "line 3, column 4" means.
+    ``iter_lookalikes`` and :func:`cjkfold.diagnose.scan` both walk text through
+    this cursor rather than carrying one each: two cursors are two chances to
+    drift, and a finding whose position is off by one is a finding the reader
+    cannot go and check.
+    """
     line, column = 1, 1
     for index, char in enumerate(text):
+        yield index, line, column, char
+        if char == "\n":
+            line, column = line + 1, 1
+        else:
+            column += 1
+
+
+def iter_lookalikes(text: str) -> Iterator[Lookalike]:
+    """Yield every foldable character in *text*, in order, with 1-based position."""
+    for index, line, column, char in _iter_positions(text):
         codepoint = ord(char)
         replacement = _FOLD.get(codepoint)
         if replacement is not None:
@@ -132,7 +149,3 @@ def iter_lookalikes(text: str) -> Iterator[Lookalike]:
                 name=unicodedata.name(char, "<unnamed>"),
                 kind=kind_of(codepoint),
             )
-        if char == "\n":
-            line, column = line + 1, 1
-        else:
-            column += 1

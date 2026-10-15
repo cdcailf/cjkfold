@@ -3,6 +3,33 @@
 Releases are cut from `main`. The tests in `tests/` are the contract; the
 equivalence table is generated, never hand-edited.
 
+## 0.3.0 — 2026-10-15
+
+### Added
+
+- **The `broken` class.** `scan` now reports `U+FFFD` and the private use areas
+  alongside look-alikes, compat characters and invisible ones — damage that cannot
+  be repaired, only reported. A private use code point earns its place in the
+  report precisely because nothing defines what it looks like: the font doing the
+  rendering decides, and it can come out as a box, as nothing at all, or as a
+  glyph that means something else. (`b17902d`)
+- **`scan` walks directories.** A corpus is a tree, not an argument list.
+  Dot-entries stay out, so `.git` does not end up in the report; a non-text file
+  found by walking is skipped and counted, while a non-text file you *named* is
+  still an error — pointing at a PDF is a mistake, walking past one is not.
+  (`b17902d`)
+- The `scan` footer prints once per run instead of once per file, which starts to
+  matter the moment you point it at a directory. (`b17902d`)
+
+### Tests
+
+- The four compat characters the roadmap named are pinned with measured values:
+  full-width `Ａ` → `A`, ideographic space → space, `U+F900` → 豈, NBSP → space.
+  (`b17902d`)
+
+No change to `fold()`, to `check`, or to the equivalence table. Exit codes and
+`check` output are unchanged.
+
 ## 0.2.0 — 2026-10-15
 
 ### Added

@@ -24,11 +24,13 @@ those glyphs are distinct encoded radicals rather than compatibility variants.
 This module closes that gap using the ``EquivalentUnifiedIdeograph`` property
 from the Unicode Character Database (Unicode 15.1+).
 
-Three explicit operations live here, and none of them calls another:
+The family of operations here is a single one: look-alike glyphs, rendered back
+onto the ideograph they were standing in for.  The other two rewrites live in
+:mod:`cjkfold.rewrite` -- the NFKC family and the invisible characters -- and none
+of the three calls another:
 
     fold()             look-alike glyphs -> their canonical ideograph
-    normalize()        the NFKC family -- full-width letters, compatibility
-                       characters -- which fold() refuses to touch on purpose
+    normalize()        the NFKC family fold() refuses to touch on purpose
     strip_invisible()  the characters that carry no glyph at all
 
 Every rewrite happens because a caller asked for that rewrite, by name, in code.
@@ -41,7 +43,6 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Iterator
 
-from ._classes import is_punctuation, manual_codepoints, strip_codepoints
 from ._table import EQUIVALENT_IDEOGRAPH
 
 __all__ = [
@@ -50,8 +51,6 @@ __all__ = [
     "iter_lookalikes",
     "Lookalike",
     "kind_of",
-    "normalize",
-    "strip_invisible",
 ]
 
 # str.translate() mapping: code point -> canonical form
@@ -120,69 +119,6 @@ def fold(text: str) -> str:
     for char in text:
         if ord(char) in _FOLD:
             return text.translate(_FOLD)
-    return text
-
-
-def normalize(text: str, *, keep_punctuation: bool = True) -> str:
-    """Rewrite the NFKC family: the characters ``fold()`` deliberately leaves alone.
-
-    Two different things live in that family, and ``keep_punctuation`` is where the
-    difference shows:
-
-    * a full-width letter (``Ａ`` U+FF21) or an ideographic space (``U+3000``) is a
-      compatibility character -- rewriting it is a repair;
-    * a full-width comma (``，`` U+FF0C) is punctuation -- NFKC turns it into ASCII
-      ``,``, and that rewrites the sentence rather than repairing it.
-
-    The default protects the second, because the alternative is a corpus that
-    quietly loses its punctuation.  ``keep_punctuation=False`` gives you the whole
-    NFKC pass, consequences included -- a decision worth having to type out.
-
-    Applied one character at a time, so no cross-character composition happens:
-    this rewrites compatibility characters and touches nothing else.  Returns the
-    original object when there is nothing to change.
-    """
-    if not text:
-        return text
-    out: list[str] = []
-    changed = False
-    for char in text:
-        if keep_punctuation and is_punctuation(char):
-            out.append(char)
-            continue
-        replacement = unicodedata.normalize("NFKC", char)
-        out.append(replacement)
-        if replacement != char:
-            changed = True
-    return "".join(out) if changed else text
-
-
-def strip_invisible(text: str, *, policy: str = "safe") -> str:
-    """Delete invisible characters from *text*.
-
-    ``policy="safe"`` (the default) removes only the ones whose deletion carries
-    nothing: zero-width space, byte order mark, soft hyphen, word joiner.
-
-    ``policy="all"`` removes everything on the list, including the load-bearing
-    half -- ZWJ, ZWNJ, variation selectors, bidi controls.  **That breaks emoji
-    sequences and Indic conjuncts**: a family of three becomes three separate
-    people.  The name is the warning, and there is no option called "smart",
-    because no such thing exists.
-
-    Returns the original object when nothing was removed.
-    """
-    if policy == "safe":
-        doomed = strip_codepoints()
-    elif policy == "all":
-        doomed = strip_codepoints() | manual_codepoints()
-    else:
-        raise ValueError(f"policy must be 'safe' or 'all', not {policy!r}")
-
-    if not text:
-        return text
-    for char in text:
-        if ord(char) in doomed:
-            return "".join(item for item in text if ord(item) not in doomed)
     return text
 
 

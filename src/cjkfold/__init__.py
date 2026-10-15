@@ -4,34 +4,22 @@
     >>> fold("⻆⺁⼀") == "角厂一"
     True
 
-See :mod:`cjkfold.normalize` for the background, :mod:`cjkfold.score` for the
-retrieval-ranking helper that pairs with it, and :mod:`cjkfold.integrations` for
-framework-agnostic adapters that fold a whole document set.
+See :mod:`cjkfold.folding` for the background, :mod:`cjkfold.rewrite` for the two
+explicit writes, :mod:`cjkfold.diagnose` for the read-only report, and
+:mod:`cjkfold.score` for the retrieval-ranking helper that pairs with folding.
 """
 
 from __future__ import annotations
 
 from ._table import EQUIVALENT_IDEOGRAPH
 from .diagnose import Finding, is_punctuation, scan, scan_stats
+from .folding import Lookalike, fold, has_lookalikes, iter_lookalikes, kind_of
 from .inputs import NotTextFile, read_text
 from .integrations import fold_document, fold_documents, rerank, text_of
-# ``normalize`` the function shadows ``cjkfold.normalize`` the module as an
-# attribute of this package. The module stays importable (``import cjkfold.normalize``
-# and ``from cjkfold.normalize import fold`` both work); what changes is that the
-# name ``cjkfold.normalize`` now reads as the function. The alternative was making
-# every caller type ``from cjkfold.normalize import normalize``, which is worse.
-from .normalize import (
-    Lookalike,
-    fold,
-    has_lookalikes,
-    iter_lookalikes,
-    kind_of,
-    normalize,
-    strip_invisible,
-)
+from .rewrite import normalize, strip_invisible
 from .score import exact_boost, ngram_overlap, ngrams
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "fold",

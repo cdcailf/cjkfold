@@ -1,6 +1,6 @@
 """Report every character that breaks a comparison without showing up.
 
-:mod:`cjkfold.normalize` answers "which glyphs *look like* a different
+:mod:`cjkfold.folding` answers "which glyphs *look like* a different
 character".  This module answers the harder half of the same question: which
 characters *do not show up at all*.  They are worse than the look-alikes, because
 a look-alike can be caught by staring at the text and this cannot::
@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Final, Iterator
 
 from ._classes import classify_invisible, is_punctuation
-from .normalize import _FOLD, _iter_positions, kind_of
+from .folding import _FOLD, _iter_positions, kind_of
 
 __all__ = ["Finding", "is_punctuation", "scan", "scan_stats"]
 

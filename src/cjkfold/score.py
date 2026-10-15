@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .normalize import fold
+from .folding import fold
 
 __all__ = ["ngram_overlap", "exact_boost", "ngrams"]
 

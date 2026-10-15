@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Iterable, Sequence, TypeVar
 
-from .normalize import fold
+from .folding import fold
 from .score import exact_boost
 
 __all__ = ["fold_documents", "rerank", "text_of"]

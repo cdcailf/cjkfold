@@ -35,8 +35,8 @@ from typing import Iterator, Sequence
 import cjkfold
 
 from .diagnose import Finding, is_punctuation, scan
+from .folding import fold, iter_lookalikes
 from .inputs import NotTextFile, read_text
-from .normalize import fold, iter_lookalikes
 
 __all__ = ["main"]
 

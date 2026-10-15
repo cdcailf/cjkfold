@@ -102,16 +102,27 @@ print()
 print("-- import paths --")
 import importlib  # noqa: E402
 
-from cjkfold.normalize import fold as fold_from_submodule  # noqa: E402
+from cjkfold.folding import fold as fold_from_folding  # noqa: E402
+from cjkfold.rewrite import normalize as normalize_from_rewrite  # noqa: E402
 
-check("`from cjkfold.normalize import fold` works", fold_from_submodule("\u2f8a") == "\u8272")
-check("`from cjkfold import normalize` is the callable", callable(cjkfold.normalize))
-submodule = importlib.import_module("cjkfold.normalize")
-check("`importlib.import_module('cjkfold.normalize')` returns the module", callable(submodule.fold))
-check(
-    "`cjkfold.normalize` is the function, not the module (a declared consequence)",
-    not hasattr(cjkfold.normalize, "fold"),
-)
+check("`from cjkfold.folding import fold` works", fold_from_folding("\u2f8a") == "\u8272")
+check("`from cjkfold.rewrite import normalize` works", normalize_from_rewrite("\uff21") == "A")
+check("`from cjkfold import normalize` is the function", callable(cjkfold.normalize))
+
+# The reason the submodule is called `folding` and not `normalize`: a name that
+# means one thing or another depending on how it was imported is worse than either.
+folding_module = importlib.import_module("cjkfold.folding")
+rewrite_module = importlib.import_module("cjkfold.rewrite")
+check("`import cjkfold.folding as m` gives the module", callable(folding_module.fold))
+check("`import cjkfold.rewrite as m` gives the module", callable(rewrite_module.normalize))
+check("`cjkfold.normalize` is not a module", not hasattr(cjkfold.normalize, "fold"))
+
+try:
+    importlib.import_module("cjkfold.normalize")
+    stale = "a module still answers at the old path"
+except ModuleNotFoundError:
+    stale = ""
+check("the old `cjkfold.normalize` path is gone, and says so plainly", not stale, stale)
 
 # ---------------------------------------------------------------- dependencies
 print()

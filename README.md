@@ -199,12 +199,12 @@ into `,` — that rewrites the sentence rather than repairing it. `strip_invisib
 defaults to `safe`, because the other half of the invisible family is load-bearing;
 there is no `policy="smart"`, because no such thing exists.
 
-One naming note, since it is the kind of thing that costs twenty minutes to work
-out: **`cjkfold.normalize` is the function**, because it shadows the submodule of
-the same name. The submodule is still importable — `from cjkfold.normalize import
-fold` works — but `import cjkfold.normalize as m` hands you the *function*, since
-`import a.b as c` means `c = a.b`. When you need the module itself and the
-attribute is taken, use `importlib.import_module("cjkfold.normalize")`.
+The modules are `cjkfold.folding` and `cjkfold.rewrite`, so that every name means
+exactly one thing: `cjkfold.normalize` is the function, `cjkfold.folding` is the
+module. Until 0.4.0 both were called `normalize`, which made
+`import cjkfold.normalize as m` hand you a function instead of the module — and
+`import a.b as c` means `c = a.b`, so `m.fold` raised `AttributeError`. Renaming
+the module is what fixed it.
 
 ### Command line
 
@@ -357,9 +357,10 @@ ZWJ 删掉，一家三口就变成三个人），`NFKC` 也管不着。
 （默认 `safe`，只删删了不心疼的；`policy="all"` 连 ZWJ 一起删，一家三口就变三个人）。
 后两个只走 Python API，不给命令行入口——`fold -w` 已经是就地改写，再递两把更狠的扳机不合算。
 
-一个命名提醒：`cjkfold.normalize` 是**函数**（它顶掉了同名的子模块）。子模块仍可导入
-（`from cjkfold.normalize import fold` 正常），但 `import cjkfold.normalize as m` 拿到的是函数
-——因为 `import a.b as c` 等价于 `c = a.b`。要模块本身就用 `importlib.import_module`。
+子模块叫 `cjkfold.folding` 和 `cjkfold.rewrite`，这样每个名字只指一样东西：
+`cjkfold.normalize` 是函数，`cjkfold.folding` 是模块。0.4.0 之前两者同名，
+于是 `import cjkfold.normalize as m` 拿到的是函数而不是模块（`import a.b as c`
+等价于 `c = a.b`），`m.fold` 直接 AttributeError。把子模块改名才算真修好。
 
 ## License
 

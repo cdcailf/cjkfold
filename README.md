@@ -314,6 +314,17 @@ uv pip install -e ".[dev]"
 .venv/bin/python -m pytest
 ```
 
+`pytest` tests the source tree. `scripts/acceptance.py` tests a *release* — the
+things a wheel can break that the source tree cannot show you. Install from PyPI
+into a throwaway environment, run it there, and it exercises every name in
+`__all__`, every subcommand, the import paths and the dependency list:
+
+```bash
+uv venv /tmp/accept --python 3.9
+uv pip install --python /tmp/accept/bin/python cjkfold
+/tmp/accept/bin/python scripts/acceptance.py
+```
+
 ## 中文简述
 
 PDF 抽出来的中文常常混着**形近异码**字符：`⻆` 和 `角` 长得一样、码位不同，于是

@@ -30,7 +30,7 @@ import sys
 import unicodedata
 from dataclasses import asdict
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 import cjkfold
 
@@ -113,10 +113,17 @@ def _cmd_fold(args: argparse.Namespace) -> int:
 
 
 #: The classes ``scan`` knows about, in the order they are printed.
-_SCAN_CLASSES = ("lookalike", "compat", "invisible")
+_SCAN_CLASSES = ("lookalike", "compat", "invisible", "broken")
 
 #: Classes that are a defect rather than a judgement call -- what ``--strict`` gates on.
 _SCAN_GATED = ("lookalike", "compat")
+
+#: Printed once per run, not once per file: scanning a corpus is the normal case,
+#: and the same two lines repeated a hundred times is noise, not guidance.
+_SCAN_FOOTER = (
+    "  see also  cjkfold scan --classes invisible\n"
+    "            cjkfold fold --help"
+)
 
 
 def _parse_classes(value: str) -> tuple[str, ...]:
@@ -224,13 +231,11 @@ def _format_scan(path: Path, text: str, findings: Sequence[Finding], *, limit: i
 
     lines.append("")
     lines.append(f"  fixable   {'    '.join(summaries)}")
-    lines.append("  see also  cjkfold scan --classes invisible")
-    lines.append("            cjkfold fold --help")
     return "\n".join(lines)
 
 
-def _report_scan(args: argparse.Namespace, path: Path, text: str) -> bool:
-    """Print one file's report; return True when ``--strict`` should fail the run."""
+def _report_scan(args: argparse.Namespace, path: Path, text: str) -> tuple[bool, int]:
+    """Print one file's report; return ``(--strict should fail, findings printed)``."""
     findings = [item for item in scan(text) if item.class_ in args.classes]
     if args.json:
         payload = {
@@ -241,21 +246,64 @@ def _report_scan(args: argparse.Namespace, path: Path, text: str) -> bool:
         print(json.dumps(payload, ensure_ascii=False))
     else:
         print(_format_scan(path, text, findings, limit=args.max))
-    return args.strict and any(item.class_ in _SCAN_GATED for item in findings)
+    gated = args.strict and any(item.class_ in _SCAN_GATED for item in findings)
+    return gated, len(findings)
+
+
+def _expand_paths(names: Sequence[str]) -> Iterator[tuple[Path, bool]]:
+    """Yield ``(path, was_named)`` for every file to scan.
+
+    A directory is expanded into the files under it, skipping dot-entries so that
+    ``.git`` and friends stay out of the report.
+
+    ``was_named`` carries the distinction the caller cares about: a file they
+    pointed at is *the* file, and failing to read it is news; files found by
+    walking a directory are a sample, and one image sitting among them is not.
+    Both can be true at once -- a named file and a directory in the same command.
+    """
+    for name in names:
+        path = Path(name)
+        if not path.is_dir():
+            yield path, True
+            continue
+        for child in sorted(path.rglob("*")):
+            if not child.is_file():
+                continue
+            if any(part.startswith(".") for part in child.relative_to(path).parts):
+                continue
+            yield child, False
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
     rejected = False
     gated = False
-    for name in args.paths:
-        path = Path(name)
+    skipped = 0
+    total = 0
+    for path, named in _expand_paths(args.paths):
         try:
             text = read_text(path)
         except NotTextFile as exc:
-            print(exc.format(), file=sys.stderr)
+            if named:
+                print(exc.format(), file=sys.stderr)
+                rejected = True
+            else:
+                # Expected, but not silent: the count is reported at the end, so a
+                # directory full of unreadable files does not look like a clean one.
+                skipped += 1
+            continue
+        except OSError as exc:
+            # A named path that cannot be opened at all -- a typo, a permission, a
+            # broken symlink.  A traceback is not a diagnostic.
+            print(f"{path}: {exc.strerror or exc}", file=sys.stderr)
             rejected = True
             continue
-        gated = _report_scan(args, path, text) or gated
+        gate, printed = _report_scan(args, path, text)
+        gated = gate or gated
+        total += printed
+    if skipped:
+        print(f"{skipped} non-text file(s) skipped", file=sys.stderr)
+    if total and not args.json:
+        print(_SCAN_FOOTER)
     if rejected:
         return 2
     return 1 if gated else 0
@@ -282,13 +330,13 @@ def build_parser() -> argparse.ArgumentParser:
         "scan",
         help="report every character that breaks a comparison (read-only; exit 0 by default)",
     )
-    scan_cmd.add_argument("paths", nargs="+", help="files to scan, or - for stdin")
+    scan_cmd.add_argument("paths", nargs="+", help="files or directories to scan, or - for stdin")
     scan_cmd.add_argument(
         "--classes",
         type=_parse_classes,
         default=_SCAN_CLASSES,
         metavar="CLASSES",
-        help="comma-separated classes to report: lookalike, compat, invisible (default: all)",
+        help=f"comma-separated classes to report: {', '.join(_SCAN_CLASSES)} (default: all)",
     )
     scan_cmd.add_argument("--json", action="store_true", help="one JSON object per file")
     scan_cmd.add_argument(
@@ -321,8 +369,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             sys.stdout.write(fold(text))
             return 0
         if args.command == "scan":
-            gated = _report_scan(args, Path("<stdin>"), text)
-            return 1 if gated else 0
+            gate, printed = _report_scan(args, Path("<stdin>"), text)
+            if printed and not args.json:
+                print(_SCAN_FOOTER)
+            return 1 if gate else 0
         found = list(iter_lookalikes(text))
         for item in found[: args.max] if args.max else found:
             print(f"     <stdin> {item}")

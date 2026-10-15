@@ -230,6 +230,54 @@ def test_the_fast_lookup_answers_exactly_what_the_tables_say():
     assert _classes.classify_invisible(0xFF0C) is None  # ，FULLWIDTH COMMA
 
 
+def test_a_replacement_character_is_broken_and_cannot_be_fixed():
+    """U+FFFD is a record of a failure, not a character to repair."""
+    only = list(scan("\ufffd"))[0]
+
+    assert only.class_ == "broken"
+    assert only.fixable == "manual"
+    assert only.replacement is None
+    assert "failed to decode" in only.note
+
+
+@pytest.mark.parametrize("codepoint", [0xE000, 0xF8FF, 0xF0000, 0x10FFFD])
+def test_private_use_code_points_are_broken_and_say_why(codepoint):
+    """Private use: what it looks like is the font's decision, not Unicode's."""
+    only = list(scan(chr(codepoint)))[0]
+
+    assert only.class_ == "broken"
+    assert only.fixable == "manual"
+    assert "private use" in only.note
+
+
+def test_ordinary_characters_are_not_broken():
+    for text in ("\u4e00", "A", "\u3000", "\u00a0"):
+        assert all(item.class_ != "broken" for item in scan(text))
+
+
+@pytest.mark.parametrize(
+    ("char", "replacement"),
+    [
+        ("\uff21", "A"),  # FULLWIDTH LATIN CAPITAL LETTER A
+        ("\u3000", " "),  # IDEOGRAPHIC SPACE
+        ("\uf900", "\u8c48"),  # CJK COMPATIBILITY IDEOGRAPH-F900 -> 豈
+        ("\u00a0", " "),  # NO-BREAK SPACE
+    ],
+    ids=["fullwidth-letter", "ideographic-space", "compat-ideograph", "nbsp"],
+)
+def test_the_compat_family_covers_the_four_the_roadmap_named(char, replacement):
+    """G3: the NFKC family needs a diagnostic entry, and these four are the test.
+
+    Measured rather than guessed -- each expected value is what the running
+    interpreter's own NFKC produces, checked before this test was written.
+    """
+    only = list(scan(char))[0]
+
+    assert only.class_ == "compat"
+    assert only.fixable == "nfkc"
+    assert only.replacement == replacement
+
+
 @pytest.mark.parametrize(
     "text",
     ["", "abc", "\ufffd", "\ue000", "\U0001f600", "\U00020000"],

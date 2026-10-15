@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Final, Iterator
 
 from ._classes import classify_invisible, is_punctuation
 from .normalize import _FOLD, _iter_positions, kind_of
@@ -73,6 +73,45 @@ class Finding:
         return f"U+{ord(self.replacement):04X}"
 
 
+_REPLACEMENT_CHARACTER = 0xFFFD
+
+#: The three private use areas.  Nothing defines what a code point in here looks
+#: like, which is exactly what makes them worth reporting.
+_PRIVATE_USE_RANGES: Final[tuple[tuple[int, int], ...]] = (
+    (0xE000, 0xF8FF),  # BMP
+    (0xF0000, 0xFFFFD),  # plane 15
+    (0x100000, 0x10FFFD),  # plane 16
+)
+
+
+def _broken_note(codepoint: int) -> str | None:
+    """Why this code point cannot be trusted, or ``None`` if it is an ordinary character.
+
+    Two different kinds of damage, and neither is fixable:
+
+    ``U+FFFD`` is not a character, it is a record of one that could not be read --
+    something upstream already failed, and the failure is still visible here.
+
+    A private use code point is the opposite: something upstream *succeeded* in
+    writing a character this machine cannot name.  Nothing dictates what it looks
+    like, so whichever font is doing the rendering decides -- it can come out as a
+    box, as nothing at all, or as a glyph that means something else entirely.
+    """
+    if codepoint == _REPLACEMENT_CHARACTER:
+        return (
+            "U+FFFD REPLACEMENT CHARACTER: something already failed to decode here. "
+            "This is not a character, it is a record of one that could not be read"
+        )
+    for low, high in _PRIVATE_USE_RANGES:
+        if low <= codepoint <= high:
+            return (
+                "a private use code point: nothing defines what it looks like, so the "
+                "font doing the rendering decides -- it can come out as a box, as "
+                "nothing at all, or as a glyph that means something else"
+            )
+    return None
+
+
 def _compat_note(char: str) -> str:
     """Why NFKC would rewrite this -- and whether that is a repair or a rewrite.
 
@@ -101,6 +140,10 @@ def scan(text: str) -> Iterator[Finding]:
     ``invisible``
         On the hand-written list in :mod:`cjkfold._classes`, carrying a
         ``fixable`` of ``strip`` or ``manual``.
+    ``broken``
+        ``U+FFFD``, or a private use code point.  Damage that cannot be repaired,
+        only reported -- and worth reporting, because a private use code point
+        renders as whatever the local font decides.
     ``compat``
         A character ``NFKC`` would rewrite but ``fold()`` deliberately leaves
         alone, so the caller can decide rather than discover.
@@ -109,7 +152,7 @@ def scan(text: str) -> Iterator[Finding]:
     package's own judgement, written down with a reason, while what ``NFKC`` does
     to a character depends on the Unicode version of whichever interpreter is
     running.  A character we have looked at should not be reclassified by the
-    host Python.
+    host Python.  ``broken`` is tested before it for the same reason.
 
     Nothing is mutated and nothing is decoded -- pass it a string, or an empty
     one.  It is a generator, so it costs one pass over the text and no memory.
@@ -148,6 +191,21 @@ def scan(text: str) -> Iterator[Finding]:
                 fixable=invisible.fixable,
                 replacement=None,
                 note=invisible.note,
+            )
+            continue
+
+        broken = _broken_note(codepoint)
+        if broken is not None:
+            yield Finding(
+                index=index,
+                line=line,
+                column=column,
+                char=char,
+                codepoint=codepoint,
+                class_="broken",
+                fixable="manual",
+                replacement=None,
+                note=broken,
             )
             continue
 

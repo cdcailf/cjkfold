@@ -134,6 +134,56 @@ def test_max_zero_prints_everything(tmp_path, capsys):
     assert out.count("U+200B") == 5
 
 
+def test_a_directory_is_walked(tmp_path, capsys):
+    (tmp_path / "a.txt").write_text(SHU + ZWSP + JU, encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "b.txt").write_text(KANGXI_COLOR, encoding="utf-8")
+
+    assert main(["scan", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+
+    assert "a.txt" in out
+    assert "b.txt" in out  # one level down, and still found
+
+
+def test_dot_entries_are_left_out(tmp_path, capsys):
+    (tmp_path / "keep.txt").write_text(KANGXI_COLOR, encoding="utf-8")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text(KANGXI_COLOR * 3, encoding="utf-8")
+
+    assert main(["scan", str(tmp_path), "--json"]) == 0
+
+    lines = [line for line in capsys.readouterr().out.splitlines() if line]
+    assert len(lines) == 1
+    assert json.loads(lines[0])["path"].endswith("keep.txt")
+
+
+def test_a_non_text_file_inside_a_directory_is_counted_not_named(tmp_path, capsys):
+    """Walking a corpus, an image among the text is expected; the count still matters."""
+    (tmp_path / "doc.txt").write_text(KANGXI_COLOR, encoding="utf-8")
+    (tmp_path / "scan.pdf").write_bytes(b"%PDF-1.4\n")
+
+    assert main(["scan", str(tmp_path)]) == 0
+
+    captured = capsys.readouterr()
+    assert "1 non-text file(s) skipped" in captured.err
+    assert "scan.pdf" not in captured.err
+
+
+def test_a_named_non_text_file_is_still_an_error(tmp_path, capsys):
+    """Pointing at a PDF is a mistake worth reporting; walking past one is not."""
+    path = tmp_path / "document.pdf"
+    path.write_bytes(b"%PDF-1.4\n")
+
+    assert main(["scan", str(path)]) == 2
+    assert "pdftotext" in capsys.readouterr().err
+
+
+def test_a_missing_path_is_reported_rather_than_raised(tmp_path, capsys):
+    assert main(["scan", str(tmp_path / "nope.txt")]) == 2
+    assert "No such file" in capsys.readouterr().err
+
+
 def test_an_unknown_class_is_rejected(zwsp_file, capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["scan", "--classes", "colour", str(zwsp_file)])

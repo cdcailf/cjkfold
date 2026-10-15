@@ -127,6 +127,15 @@ The `fixable` column is the point of the design:
 | `strip` | safe to delete — it never shows and carries nothing |
 | `manual` | **do not delete it without looking.** ZWJ, ZWNJ, variation selectors and bidi controls change the meaning or the rendering of the text around them |
 
+There is a fourth class, and it is damage rather than a difference. `U+FFFD` is not
+a character, it is a record of one that could not be read — something upstream
+already failed, and the failure is still sitting in your text. A private use code
+point is the opposite: something upstream *succeeded* in writing a character this
+machine cannot name, and nothing defines what it looks like, so whichever font is
+doing the rendering decides — it can come out as a box, as nothing at all, or as a
+glyph that means something else entirely. Both are reported; neither can be
+repaired.
+
 So `scan` exits `0` even when it finds something: it is a report, not a gate. It has
 to be — a gate that fails on a load-bearing joiner fails on ordinary emoji. Pass
 `--strict` if you have read the findings and want a gate anyway.
@@ -196,6 +205,7 @@ there is no `policy="smart"`, because no such thing exists.
 cjkfold check document.txt      # report look-alikes, exit 1 if any (CI-friendly)
 cjkfold check --quiet docs/*.txt
 cjkfold scan document.txt       # report every class of finding, exit 0 (it is a report)
+cjkfold scan corpus/            # walk a directory; non-text files are skipped and counted
 cjkfold scan --strict corpus.txt    # ...or exit 1 when a foldable/compat character is found
 cjkfold scan --json corpus.txt  # one JSON object per file
 cjkfold fold document.txt       # print the folded text
@@ -317,7 +327,12 @@ ZWJ 删掉，一家三口就变成三个人），`NFKC` 也管不着。
 `cjkfold scan` 三类都看，并对每条标注处置：`fold`（可以替换）/ `nfkc`（NFKC 才管，
 `fold()` 故意不做）/ `strip`（删掉安全）/ `manual`（**不许自动改，你自己看**）。
 `scan` 默认退出码是 `0`：它是体检报告，不是门禁——正常语料里一个 emoji 就带两个 ZWJ，
-拿它拦 CI 会把好文档判死；确实想要门禁就加 `--strict`。
+拿它拦 CI 会把好文档判死；确实想要门禁就加 `--strict`。它也能直接吃目录
+（`cjkfold scan corpus/`），非文本文件跳过并计数。
+
+第四类不是"不一样"而是"坏了"：`U+FFFD` 是"有一个字没能读出来"的记录，
+私用区则相反——上游**成功**写进了一个这台机器叫不出名字的字，而它长什么样由读它的
+字体决定，可以是个方框、可以是空白、也可以长得像别的字。两类都只能报，不能修。
 
 三个写操作各管一件事，互不调用：`fold()` 管形近、`normalize()` 管 NFKC 那一族
 （默认护住全角标点，否则一句中文的逗号全变英文）、`strip_invisible()` 管看不见的那一族

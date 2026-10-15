@@ -3,6 +3,45 @@
 Releases are cut from `main`. The tests in `tests/` are the contract; the
 equivalence table is generated, never hand-edited.
 
+## 0.2.0 — 2026-10-15
+
+### Added
+
+- **`cjkfold scan`** — every character that breaks a comparison, in one read-only
+  pass: the look-alikes, the NFKC family `fold()` refuses to touch, and the
+  invisible family. Each finding says what to do with it — `fold`, `nfkc`,
+  `strip`, or `manual`, where `manual` means *do not touch this without looking*.
+  It exits `0` by default, because it is a report and not a gate: a gate that fails
+  on a load-bearing joiner fails on ordinary emoji. `--strict` gates anyway,
+  `--json` feeds a pipeline, `--classes` narrows the report. (`c5be88a`, `5835dbf`)
+- **`normalize()`** and **`strip_invisible()`** — the two explicit writes. The
+  first applies the NFKC family with full-width punctuation spared by default; the
+  second deletes invisible characters, `safe` by default, because half of that
+  family carries meaning — a family of three is five code points, and deleting the
+  joiners leaves three separate people. Neither is exposed as a subcommand: `fold -w`
+  is already an in-place rewrite, and two more destructive commands would be a gun
+  pointed at a corpus. (`a733ef5`)
+- `Finding`, `scan_stats()` and `is_punctuation()` in the public API.
+  (`2bd05e6`, `5835dbf`)
+
+### Changed
+
+- `scan`'s whitelist lookup is now a single set test instead of a dict lookup plus
+  four range comparisons: 0.42s → 0.29s over 640,000 characters. (`f6c5f4f`)
+
+### Docs
+
+- README: **"The characters that never show up"** and **"The other two rewrites"**,
+  both carrying output from real runs rather than hand-copied examples; the 中文简述
+  follows. The `check` example also gained the summary line it had been missing —
+  the reason it was missing is that it had been copied by hand, which is exactly
+  what the new section refuses to do. (`e9c4d68`, and this release)
+- `tests/fixtures/` — the three files the roadmap asked for, with `check`'s output
+  frozen byte for byte. (`1a468e5`)
+
+No change to `fold()`, to `check`, or to the equivalence table. Text that folded
+correctly under 0.1.2 folds identically under 0.2.0.
+
 ## 0.1.2 — 2026-10-14
 
 ### Fixes

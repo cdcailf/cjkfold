@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cjkfold"
-version = "0.1.2"
-description = "Fold look-alike CJK glyphs (Kangxi radicals, CJK radical supplements) so text extracted from PDFs matches again."
+version = "0.2.0"
+description = "Fold look-alike CJK glyphs, and diagnose every character that breaks a text comparison -- look-alikes, NFKC rewrites, and the invisible ones (zero-width, bidi, variation selectors)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -13,6 +13,7 @@ authors = [{ name = "cdcailf" }]
 keywords = [
     "cjk", "chinese", "unicode", "nfkc", "normalization",
     "pdf-extraction", "rag", "retrieval", "text-matching",
+    "zero-width", "invisible-characters", "watermark",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

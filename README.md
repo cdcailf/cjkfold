@@ -164,6 +164,32 @@ import unicodedata
 clean = fold(unicodedata.normalize("NFKC", text))
 ```
 
+### The other two rewrites
+
+`fold()` is no longer the only write, but it is still the only one the command line
+will do for you. The other two are explicit API calls, and that is on purpose:
+`fold -w` already rewrites files in place, and two more destructive operations
+behind flags would be a loaded gun pointed at a corpus.
+
+```python
+from cjkfold import fold, normalize, strip_invisible
+
+fold("标准颜⾊值")                          # '标准颜色值'  the look-alike layer
+normalize("Ａ，b")                          # 'A，b'        NFKC, punctuation spared
+normalize("Ａ，b", keep_punctuation=False)   # 'A,b'         ...or not spared
+
+FAMILY = "\U0001F468\u200D\U0001F469\u200D\U0001F467"   # 5 code points, one glyph
+
+strip_invisible("数\u200b据")               # '数据'        safe: ZWSP, BOM, soft hyphen, word joiner
+strip_invisible(FAMILY)                    # unchanged     -- the joiners carry meaning
+strip_invisible(FAMILY, policy="all")      # 3 code points -- three separate people
+```
+
+`normalize()` spares full-width punctuation by default, because NFKC turns `，`
+into `,` — that rewrites the sentence rather than repairing it. `strip_invisible()`
+defaults to `safe`, because the other half of the invisible family is load-bearing;
+there is no `policy="smart"`, because no such thing exists.
+
 ### Command line
 
 ```bash
@@ -292,6 +318,11 @@ ZWJ 删掉，一家三口就变成三个人），`NFKC` 也管不着。
 `fold()` 故意不做）/ `strip`（删掉安全）/ `manual`（**不许自动改，你自己看**）。
 `scan` 默认退出码是 `0`：它是体检报告，不是门禁——正常语料里一个 emoji 就带两个 ZWJ，
 拿它拦 CI 会把好文档判死；确实想要门禁就加 `--strict`。
+
+三个写操作各管一件事，互不调用：`fold()` 管形近、`normalize()` 管 NFKC 那一族
+（默认护住全角标点，否则一句中文的逗号全变英文）、`strip_invisible()` 管看不见的那一族
+（默认 `safe`，只删删了不心疼的；`policy="all"` 连 ZWJ 一起删，一家三口就变三个人）。
+后两个只走 Python API，不给命令行入口——`fold -w` 已经是就地改写，再递两把更狠的扳机不合算。
 
 ## License
 

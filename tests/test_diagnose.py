@@ -208,6 +208,28 @@ def test_the_strip_set_and_the_manual_set_do_not_overlap():
         assert codepoint not in safe
 
 
+def test_the_fast_lookup_answers_exactly_what_the_tables_say():
+    """``_KNOWN`` is a derived index, and a derived index can drift.
+
+    ``classify_invisible`` short-circuits on ``_KNOWN`` before consulting the
+    tables, so if that set ever falls out of sync the classifier starts answering
+    ``None`` for characters it has an opinion about -- silently, and only for the
+    ones nobody happened to test. This is the test that catches that.
+    """
+    from cjkfold import _classes
+
+    listed = set(_classes.strip_codepoints()) | set(_classes.manual_codepoints())
+
+    assert _classes._KNOWN == listed
+    for codepoint in sorted(listed):
+        assert _classes.classify_invisible(codepoint) is not None
+
+    # Characters that are on no list at all, including one that is a compat
+    # finding -- a different class, and not this one's business.
+    assert _classes.classify_invisible(0x4E00) is None  # 一
+    assert _classes.classify_invisible(0xFF0C) is None  # ，FULLWIDTH COMMA
+
+
 @pytest.mark.parametrize(
     "text",
     ["", "abc", "\ufffd", "\ue000", "\U0001f600", "\U00020000"],

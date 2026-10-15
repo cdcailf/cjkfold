@@ -29,7 +29,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Iterator
 
-from ._classes import classify_invisible
+from ._classes import classify_invisible, is_punctuation
 from .normalize import _FOLD, _iter_positions, kind_of
 
 __all__ = ["Finding", "is_punctuation", "scan", "scan_stats"]
@@ -71,19 +71,6 @@ class Finding:
         if self.replacement is None or len(self.replacement) != 1:
             return None
         return f"U+{ord(self.replacement):04X}"
-
-
-def is_punctuation(char: str) -> bool:
-    """True when NFKC's rewrite of *char* swaps punctuation rather than repairing it.
-
-    Full-width punctuation is filed under ``compat`` like everything else NFKC
-    would touch, but it is not a defect: NFKC turns a full-width comma into an
-    ASCII comma, which rewrites the sentence instead of fixing anything.  That
-    distinction is the one a reader most needs -- and the one a report listing
-    forty commas per document buries.  Callers use this to keep punctuation in
-    view without letting it crowd out the findings that matter.
-    """
-    return unicodedata.category(char).startswith("P")
 
 
 def _compat_note(char: str) -> str:

@@ -25,12 +25,14 @@ controls are contiguous -- the notes are still written one at a time.
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from typing import Final
 
 __all__ = [
     "Invisible",
     "classify_invisible",
+    "is_punctuation",
     "strip_codepoints",
     "manual_codepoints",
 ]
@@ -175,3 +177,18 @@ def manual_codepoints() -> frozenset[int]:
     for low, high, _entry in _MANUAL_RANGES:
         expanded.update(range(low, high + 1))
     return frozenset(expanded)
+
+
+def is_punctuation(char: str) -> bool:
+    """True when NFKC's rewrite of *char* swaps punctuation rather than repairing it.
+
+    A full-width comma is filed under ``compat`` like everything else NFKC would
+    touch, but it is not a defect: NFKC turns it into an ASCII comma, which rewrites
+    the sentence instead of fixing anything.  That distinction is the one a reader
+    most needs -- and the one a report listing forty commas per document buries.
+
+    It lives here, in the module that owns character classification, because both
+    the reporter (``diagnose``) and the rewriter (``normalize``) need it, and a
+    second copy is a second thing to drift.
+    """
+    return unicodedata.category(char).startswith("P")

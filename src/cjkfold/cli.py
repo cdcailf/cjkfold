@@ -1,29 +1,40 @@
 """Command line interface for cjkfold.
 
     cjkfold check FILE...        report look-alike characters
+    cjkfold scan  FILE...        report every character that breaks a comparison
     cjkfold fold  FILE...        print (or rewrite) folded text
 
 Exit codes::
 
     0   clean
-    1   look-alike characters found
+    1   look-alike characters found (``check``); findings under ``scan --strict``
     2   the input is not a text file (or not UTF-8) -- nothing was scanned
 
 ``check`` exits non-zero when it finds anything, so it can be dropped into a build
 or ingest pipeline to catch PDF extraction regressions early. Code 2 is kept separate
 from code 1 on purpose: "I found something" and "I could not look" are different
 answers, and a pipeline that can only see "non-zero" would report a PDF as a finding.
+
+``scan`` is the other half of the answer and deliberately behaves differently: it
+reports every class of finding, including the ones that must *not* be repaired
+automatically, so it exits 0 by default. A gate that fails on a load-bearing
+zero-width joiner fails on ordinary emoji; scanning is a report, not a gate.
+``--strict`` exists for a caller who has read the findings and wants a gate anyway.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import unicodedata
+from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
 import cjkfold
 
+from .diagnose import Finding, scan
 from .inputs import NotTextFile, read_text
 from .normalize import fold, iter_lookalikes
 
@@ -101,6 +112,140 @@ def _cmd_fold(args: argparse.Namespace) -> int:
     return 2 if rejected else 0
 
 
+#: The classes ``scan`` knows about, in the order they are printed.
+_SCAN_CLASSES = ("lookalike", "compat", "invisible")
+
+#: Classes that are a defect rather than a judgement call -- what ``--strict`` gates on.
+_SCAN_GATED = ("lookalike", "compat")
+
+
+def _parse_classes(value: str) -> tuple[str, ...]:
+    """Parse ``--classes`` as a comma-separated list.
+
+    Deliberately *one* token rather than ``nargs="+"``: with a variadic option next
+    to a variadic ``paths``, argparse hands ``--classes invisible file.txt`` both
+    the class and the filename, and rejects it. The report then suggests its own
+    usage in a form that cannot work.
+    """
+    classes = tuple(part.strip() for part in value.split(",") if part.strip())
+    unknown = [item for item in classes if item not in _SCAN_CLASSES]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown class: {', '.join(unknown)} -- choose from {', '.join(_SCAN_CLASSES)}"
+        )
+    if not classes:
+        raise argparse.ArgumentTypeError(f"expected at least one of: {', '.join(_SCAN_CLASSES)}")
+    return classes
+
+
+_POSITION_WIDTH = 5
+_DESCRIPTION_WIDTH = 30
+#: Where a finding's reason starts -- under the code point, not under the position.
+_NOTE_INDENT = " " * (4 + _POSITION_WIDTH + 2)
+
+
+def _visual_width(text: str) -> int:
+    """Width in terminal columns; CJK glyphs take two, everything else takes one.
+
+    Used only to line the report up.  ``len()`` would be right for the machine and
+    wrong for the reader, and this report is for the reader.
+    """
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * max(0, width - _visual_width(text))
+
+
+def _finding_head(finding: Finding) -> str:
+    """One finding's first line: where it is, what it is, and what to do about it."""
+    position = f"{finding.line}:{finding.column}"
+    if finding.replacement is None:
+        what, source = unicodedata.name(finding.char, "<unnamed>"), ""
+    else:
+        what = f"-> {finding.replacement} {finding.replacement_label or '...'}"
+        source = f"   ({unicodedata.name(finding.char, '<unnamed>')})"
+    return (
+        f"    {position:>{_POSITION_WIDTH}}  {finding.codepoint_label}  "
+        f"{_pad(what, _DESCRIPTION_WIDTH)} {finding.fixable}{source}"
+    )
+
+
+def _format_scan(path: Path, text: str, findings: Sequence[Finding]) -> str:
+    """Render one file's report. Grouped by class, because the classes differ in kind.
+
+    The reason for a classification is printed once per character, not once per
+    occurrence: an emoji-heavy document can hold hundreds of joiners, and saying
+    the same sentence hundreds of times buries the two lines that differ.
+    """
+    counted = f"{len(text):,} characters"
+    if not findings:
+        return f"{path}  {counted}  clean"
+
+    plural = "" if len(findings) == 1 else "s"
+    lines = [f"{path}  {counted}  {len(findings)} finding{plural}"]
+
+    explained: dict[int, str] = {}
+    for class_ in _SCAN_CLASSES:
+        group = [item for item in findings if item.class_ == class_]
+        if not group:
+            continue
+        lines.append("")
+        lines.append(f"  {class_}  {len(group)}")
+        for finding in group:
+            lines.append(_finding_head(finding))
+            first_seen = explained.get(finding.codepoint)
+            if first_seen is None:
+                explained[finding.codepoint] = f"{finding.line}:{finding.column}"
+                lines.append(f"{_NOTE_INDENT}{finding.note}")
+            else:
+                lines.append(f"{_NOTE_INDENT}(same character as {first_seen})")
+
+    summaries = []
+    for class_ in _SCAN_CLASSES:
+        fixes = list(dict.fromkeys(item.fixable for item in findings if item.class_ == class_))
+        if fixes:
+            summaries.append(f"{class_}: {', '.join(fixes)}")
+
+    lines.append("")
+    lines.append(f"  fixable   {'    '.join(summaries)}")
+    lines.append("  see also  cjkfold scan --classes invisible")
+    lines.append("            cjkfold fold --help")
+    return "\n".join(lines)
+
+
+def _report_scan(args: argparse.Namespace, path: Path, text: str) -> bool:
+    """Print one file's report; return True when ``--strict`` should fail the run."""
+    findings = [item for item in scan(text) if item.class_ in args.classes]
+    if args.json:
+        payload = {
+            "path": str(path),
+            "characters": len(text),
+            "findings": [asdict(finding) for finding in findings],
+        }
+        print(json.dumps(payload, ensure_ascii=False))
+    else:
+        print(_format_scan(path, text, findings))
+    return args.strict and any(item.class_ in _SCAN_GATED for item in findings)
+
+
+def _cmd_scan(args: argparse.Namespace) -> int:
+    rejected = False
+    gated = False
+    for name in args.paths:
+        path = Path(name)
+        try:
+            text = read_text(path)
+        except NotTextFile as exc:
+            print(exc.format(), file=sys.stderr)
+            rejected = True
+            continue
+        gated = _report_scan(args, path, text) or gated
+    if rejected:
+        return 2
+    return 1 if gated else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG,
@@ -118,6 +263,26 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--max", type=int, default=20, help="max findings to print per file (0 = all)")
     check.set_defaults(func=_cmd_check)
 
+    scan_cmd = sub.add_parser(
+        "scan",
+        help="report every character that breaks a comparison (read-only; exit 0 by default)",
+    )
+    scan_cmd.add_argument("paths", nargs="+", help="files to scan, or - for stdin")
+    scan_cmd.add_argument(
+        "--classes",
+        type=_parse_classes,
+        default=_SCAN_CLASSES,
+        metavar="CLASSES",
+        help="comma-separated classes to report: lookalike, compat, invisible (default: all)",
+    )
+    scan_cmd.add_argument("--json", action="store_true", help="one JSON object per file")
+    scan_cmd.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit 1 when a foldable or compat character is present",
+    )
+    scan_cmd.set_defaults(func=_cmd_scan)
+
     fold_cmd = sub.add_parser("fold", help="write folded text to stdout")
     fold_cmd.add_argument("paths", nargs="+", help="files to fold, or - for stdin")
     fold_cmd.add_argument("-w", "--write", action="store_true", help="rewrite the files in place")
@@ -134,6 +299,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "fold":
             sys.stdout.write(fold(text))
             return 0
+        if args.command == "scan":
+            gated = _report_scan(args, Path("<stdin>"), text)
+            return 1 if gated else 0
         found = list(iter_lookalikes(text))
         for item in found[: args.max] if args.max else found:
             print(f"     <stdin> {item}")

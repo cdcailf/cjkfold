@@ -73,6 +73,26 @@ class Finding:
         return f"U+{ord(self.replacement):04X}"
 
 
+def _compat_note(char: str) -> str:
+    """Why NFKC would rewrite this -- and whether that is a repair or a rewrite.
+
+    Full-width punctuation is the case that matters.  NFKC turns a full-width
+    comma into an ASCII comma; that does not repair the text, it rewrites it, and
+    a reader told only "NFKC would rewrite this" is one command away from running
+    NFKC over a corpus and losing its punctuation.  Drawing that line is the
+    difference between a report worth reading and a report that gets ignored.
+    """
+    if unicodedata.category(char).startswith("P"):
+        return (
+            "a full-width punctuation mark: NFKC would replace it with ASCII "
+            "punctuation -- that rewrites the text rather than repairing it"
+        )
+    return (
+        "NFKC would rewrite this; fold() leaves it alone on purpose, so the "
+        "decision stays with the caller"
+    )
+
+
 def scan(text: str) -> Iterator[Finding]:
     """Yield one :class:`Finding` per problematic character in *text*, in order.
 
@@ -145,10 +165,7 @@ def scan(text: str) -> Iterator[Finding]:
                     class_="compat",
                     fixable="nfkc",
                     replacement=folded,
-                    note=(
-                        "NFKC would rewrite this; fold() leaves it alone on "
-                        "purpose, so the decision stays with the caller"
-                    ),
+                    note=_compat_note(char),
                 )
 
 

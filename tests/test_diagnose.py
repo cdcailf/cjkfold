@@ -29,6 +29,7 @@ VS16 = "\ufe0f"  # VARIATION SELECTOR-16      picks a glyph for the char before 
 BOM = "\ufeff"  # ZERO WIDTH NO-BREAK SPACE   a byte order mark at file start
 SOFT_HYPHEN = "\u00ad"  # SOFT HYPHEN         shows only where a line breaks
 FULLWIDTH_A = "\uff21"  # FULLWIDTH LATIN CAPITAL LETTER A  -> A U+0041
+FULLWIDTH_COMMA = "\uff0c"  # FULLWIDTH COMMA               -> , U+002C
 KANGXI_COLOR = "\u2f8a"  # KANGXI RADICAL COLOR  looks like 色
 SHU = "\u6570"  # 数
 JU = "\u636e"  # 据
@@ -116,6 +117,23 @@ def test_fullwidth_letters_are_reported_as_compat():
     assert only.replacement == "A"
     assert only.replacement_label == "U+0041"
     assert only.codepoint == 0xFF21
+
+
+def test_fullwidth_punctuation_says_what_nfkc_would_actually_do():
+    """The note has to draw the line between repairing text and rewriting it.
+
+    A full-width comma is not a defect to be fixed -- NFKC would turn it into an
+    ASCII comma, which rewrites the sentence. A report that files it under the same
+    sentence as a full-width letter invites the reader to lose their punctuation.
+    """
+    punctuation = list(scan(FULLWIDTH_COMMA))[0]
+    letter = list(scan(FULLWIDTH_A))[0]
+
+    assert punctuation.class_ == "compat"
+    assert punctuation.replacement == ","
+    assert "ASCII" in punctuation.note
+    assert "rather than repairing" in punctuation.note
+    assert punctuation.note != letter.note
 
 
 def test_a_kangxi_radical_is_reported_as_foldable_not_as_compat():

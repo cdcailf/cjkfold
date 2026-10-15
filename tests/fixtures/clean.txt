@@ -1,0 +1,2 @@
+这是一段普通的中文文本，含标点。
+Second line, plain ASCII.

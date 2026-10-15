@@ -95,6 +95,45 @@ def test_classes_accepts_a_list_and_still_takes_a_filename(zwsp_file, capsys):
     assert "U+200B" in capsys.readouterr().out
 
 
+def test_compat_puts_the_defects_before_the_punctuation(tmp_path, capsys):
+    """A full-width comma is not a defect; a full-width letter is.
+
+    Both are `compat`, both are `nfkc`, and a document written in Chinese has
+    dozens of the first and none of the second. So the defect gets the first
+    screenful, and the punctuation waits its turn.
+    """
+    path = tmp_path / "mixed.txt"
+    path.write_text("\u554a\uff0c\u554a\uff21\u554a\n", encoding="utf-8")  # 啊，啊Ａ啊
+
+    assert main(["scan", str(path)]) == 0
+    out = capsys.readouterr().out
+
+    assert out.index("U+FF21") < out.index("U+FF0C")
+
+
+def test_max_truncates_per_class(tmp_path, capsys):
+    path = tmp_path / "many.txt"
+    path.write_text("\u6570\u200b\u636e\n" * 5, encoding="utf-8")  # 5 zero-width spaces
+
+    assert main(["scan", str(path), "--max", "2"]) == 0
+    out = capsys.readouterr().out
+
+    assert "invisible  5" in out  # the count is the truth, whatever is printed
+    assert "and 3 more" in out
+    assert out.count("U+200B") == 2
+
+
+def test_max_zero_prints_everything(tmp_path, capsys):
+    path = tmp_path / "many.txt"
+    path.write_text("\u6570\u200b\u636e\n" * 5, encoding="utf-8")
+
+    assert main(["scan", str(path), "--max", "0"]) == 0
+    out = capsys.readouterr().out
+
+    assert "more (raise --max" not in out
+    assert out.count("U+200B") == 5
+
+
 def test_an_unknown_class_is_rejected(zwsp_file, capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["scan", "--classes", "colour", str(zwsp_file)])

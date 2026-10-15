@@ -34,7 +34,7 @@ from typing import Sequence
 
 import cjkfold
 
-from .diagnose import Finding, scan
+from .diagnose import Finding, is_punctuation, scan
 from .inputs import NotTextFile, read_text
 from .normalize import fold, iter_lookalikes
 
@@ -171,8 +171,11 @@ def _finding_head(finding: Finding) -> str:
     )
 
 
-def _format_scan(path: Path, text: str, findings: Sequence[Finding]) -> str:
+def _format_scan(path: Path, text: str, findings: Sequence[Finding], *, limit: int) -> str:
     """Render one file's report. Grouped by class, because the classes differ in kind.
+
+    Truncated per class rather than per file: the three classes are three different
+    questions, and one noisy class should not hide the other two.
 
     The reason for a classification is printed once per character, not once per
     occurrence: an emoji-heavy document can hold hundreds of joiners, and saying
@@ -190,9 +193,17 @@ def _format_scan(path: Path, text: str, findings: Sequence[Finding]) -> str:
         group = [item for item in findings if item.class_ == class_]
         if not group:
             continue
+        if class_ == "compat":
+            # A compat finding can be a defect (a full-width letter) or merely
+            # punctuation NFKC would swap out. sorted() is stable, so the reading
+            # order inside each half is preserved -- what changes is which half
+            # gets the first screenful.
+            group = sorted(group, key=lambda item: is_punctuation(item.char))
+        shown = group if limit <= 0 else group[:limit]
+
         lines.append("")
         lines.append(f"  {class_}  {len(group)}")
-        for finding in group:
+        for finding in shown:
             lines.append(_finding_head(finding))
             first_seen = explained.get(finding.codepoint)
             if first_seen is None:
@@ -200,6 +211,10 @@ def _format_scan(path: Path, text: str, findings: Sequence[Finding]) -> str:
                 lines.append(f"{_NOTE_INDENT}{finding.note}")
             else:
                 lines.append(f"{_NOTE_INDENT}(same character as {first_seen})")
+        if len(shown) < len(group):
+            lines.append(
+                f"{_NOTE_INDENT}... and {len(group) - len(shown)} more (raise --max to see them)"
+            )
 
     summaries = []
     for class_ in _SCAN_CLASSES:
@@ -225,7 +240,7 @@ def _report_scan(args: argparse.Namespace, path: Path, text: str) -> bool:
         }
         print(json.dumps(payload, ensure_ascii=False))
     else:
-        print(_format_scan(path, text, findings))
+        print(_format_scan(path, text, findings, limit=args.max))
     return args.strict and any(item.class_ in _SCAN_GATED for item in findings)
 
 
@@ -276,6 +291,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated classes to report: lookalike, compat, invisible (default: all)",
     )
     scan_cmd.add_argument("--json", action="store_true", help="one JSON object per file")
+    scan_cmd.add_argument(
+        "--max",
+        type=int,
+        default=20,
+        help="max findings to print per class (0 = all)",
+    )
     scan_cmd.add_argument(
         "--strict",
         action="store_true",

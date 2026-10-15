@@ -32,7 +32,7 @@ from typing import Iterator
 from ._classes import classify_invisible
 from .normalize import _FOLD, _iter_positions, kind_of
 
-__all__ = ["Finding", "scan", "scan_stats"]
+__all__ = ["Finding", "is_punctuation", "scan", "scan_stats"]
 
 
 @dataclass(frozen=True)
@@ -73,16 +73,27 @@ class Finding:
         return f"U+{ord(self.replacement):04X}"
 
 
+def is_punctuation(char: str) -> bool:
+    """True when NFKC's rewrite of *char* swaps punctuation rather than repairing it.
+
+    Full-width punctuation is filed under ``compat`` like everything else NFKC
+    would touch, but it is not a defect: NFKC turns a full-width comma into an
+    ASCII comma, which rewrites the sentence instead of fixing anything.  That
+    distinction is the one a reader most needs -- and the one a report listing
+    forty commas per document buries.  Callers use this to keep punctuation in
+    view without letting it crowd out the findings that matter.
+    """
+    return unicodedata.category(char).startswith("P")
+
+
 def _compat_note(char: str) -> str:
     """Why NFKC would rewrite this -- and whether that is a repair or a rewrite.
 
-    Full-width punctuation is the case that matters.  NFKC turns a full-width
-    comma into an ASCII comma; that does not repair the text, it rewrites it, and
-    a reader told only "NFKC would rewrite this" is one command away from running
-    NFKC over a corpus and losing its punctuation.  Drawing that line is the
+    A reader told only "NFKC would rewrite this" is one command away from running
+    NFKC over a whole corpus and losing its punctuation.  Drawing that line is the
     difference between a report worth reading and a report that gets ignored.
     """
-    if unicodedata.category(char).startswith("P"):
+    if is_punctuation(char):
         return (
             "a full-width punctuation mark: NFKC would replace it with ASCII "
             "punctuation -- that rewrites the text rather than repairing it"
